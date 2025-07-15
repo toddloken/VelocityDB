@@ -1,0 +1,28 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>VelocityDB Test</title>
+</head>
+<body>
+<h1>VelocityDB Test Application</h1>
+
+<h2>Database Operations</h2>
+<button onclick="initializeDatabase()">Initialize Database</button>
+<button onclick="getWorkspaceData()">Get Workspace Data</button>
+<button onclick="getUsers()">Get Users</button>
+
+<h2>Schema Operations</h2>
+<button onclick="getDatabaseSchema()">Get Database Schema</button>
+<button onclick="getDataStructure()">Get Data Structure</button>
+<button onclick="getAvailableTypes()">Get Available Types</button>
+
+<h2>Type-Specific Schema</h2>
+<button onclick="getTypeSchema('User')">Get User Schema</button>
+<button onclick="getTypeSchema('WorkspaceData')">Get WorkspaceData Schema</button>
+<button onclick="getTypeSchema('WorkspaceObject')">Get WorkspaceObject Schema</button>
+
+<div id="output"></div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
