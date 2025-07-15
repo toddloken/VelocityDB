@@ -9,37 +9,43 @@ namespace VelocityDBApp.Services
 {
     public class SchemaService
     {
-        private readonly string _databasePath;
-        
-        public SchemaService(string databasePath)
+        private readonly string _databaseName;
+        private readonly string _basePath;
+
+        public SchemaService(string databaseName)
         {
-            _databasePath = databasePath;
+            _databaseName = databaseName;
+            _basePath = System.IO.Path.Combine(Environment.CurrentDirectory, "VDB");
         }
-        
+
+        private SessionNoServer CreateReadSession()
+        {
+            SessionBase.BaseDatabasePath = _basePath;
+            return new SessionNoServer(_databaseName);
+        }
+
         public object GetDatabaseSchema()
         {
-            using (var session = new SessionNoServer(_databasePath))
+            using (var session = CreateReadSession())
             {
-                session.BeginRead(); // Start read transaction
-                
-                var schema = new
+                session.BeginRead();
+
+                return new
                 {
-                    DatabasePath = _databasePath,
-                    RegisteredTypes = GetRegisteredTypes(session),
+                    DatabasePath = _basePath,
+                    RegisteredTypes = GetRegisteredTypes(),
                     Statistics = GetDatabaseStatistics(session),
-                    Indexes = GetIndexInformation(session)
+                    Indexes = GetIndexInformation()
                 };
-                
-                return schema;
             }
         }
-        
+
         public object GetTypeSchema(string typeName)
         {
             var type = GetTypeByName(typeName);
             if (type == null)
                 return null;
-                
+
             return new
             {
                 TypeName = type.Name,
@@ -49,14 +55,14 @@ namespace VelocityDBApp.Services
                 BaseType = type.BaseType?.Name
             };
         }
-        
+
         public object GetDataStructure()
         {
-            using (var session = new SessionNoServer(_databasePath))
+            using (var session = CreateReadSession())
             {
-                session.BeginRead(); // Start read transaction
-                
-                var structure = new
+                session.BeginRead();
+
+                return new
                 {
                     Users = GetObjectStructure<User>(session),
                     WorkspaceData = GetObjectStructure<WorkspaceData>(session),
@@ -64,17 +70,12 @@ namespace VelocityDBApp.Services
                     Relationships = GetObjectStructure<Relationship>(session),
                     Positions = GetObjectStructure<Position>(session)
                 };
-                
-                return structure;
             }
         }
-        
-        private List<object> GetRegisteredTypes(SessionNoServer session)
+
+        private List<object> GetRegisteredTypes()
         {
-            var types = new List<object>();
-            
-            // Get all registered types
-            var registeredTypes = new[]
+            var types = new[]
             {
                 typeof(User),
                 typeof(WorkspaceData),
@@ -82,20 +83,15 @@ namespace VelocityDBApp.Services
                 typeof(Position),
                 typeof(Relationship)
             };
-            
-            foreach (var type in registeredTypes)
+
+            return types.Select(type => new
             {
-                types.Add(new
-                {
-                    TypeName = type.Name,
-                    FullName = type.FullName,
-                    Properties = GetTypeProperties(type)
-                });
-            }
-            
-            return types;
+                TypeName = type.Name,
+                FullName = type.FullName,
+                Properties = GetTypeProperties(type)
+            }).ToList<object>();
         }
-        
+
         private object GetTypeProperties(Type type)
         {
             return type.GetProperties(BindingFlags.Public | BindingFlags.Instance)
@@ -104,12 +100,12 @@ namespace VelocityDBApp.Services
                           Name = p.Name,
                           Type = p.PropertyType.Name,
                           IsGeneric = p.PropertyType.IsGenericType,
-                          GenericArguments = p.PropertyType.IsGenericType ? 
-                              p.PropertyType.GetGenericArguments().Select(g => g.Name).ToArray() : 
-                              new string[0]
+                          GenericArguments = p.PropertyType.IsGenericType
+                              ? p.PropertyType.GetGenericArguments().Select(g => g.Name).ToArray()
+                              : Array.Empty<string>()
                       }).ToList();
         }
-        
+
         private object GetDatabaseStatistics(SessionNoServer session)
         {
             try
@@ -136,23 +132,20 @@ namespace VelocityDBApp.Services
                 };
             }
         }
-        
-        private object GetIndexInformation(SessionNoServer session)
+
+        private object GetIndexInformation()
         {
-            // VelocityDB index information - this is a simplified version
             return new
             {
-                Message = "Index information would be retrieved from VelocityDB metadata",
-                // You can expand this based on VelocityDB's index APIs
+                Message = "Index information would be retrieved from VelocityDB metadata"
             };
         }
-        
+
         private object GetObjectStructure<T>(SessionNoServer session) where T : class
         {
             try
             {
-                var objects = session.AllObjects<T>().Take(5).ToList(); // Get first 5 for structure
-                
+                var objects = session.AllObjects<T>().Take(5).ToList();
                 return new
                 {
                     TypeName = typeof(T).Name,
@@ -173,7 +166,7 @@ namespace VelocityDBApp.Services
                 };
             }
         }
-        
+
         private Type GetTypeByName(string typeName)
         {
             var types = new[]
@@ -184,7 +177,7 @@ namespace VelocityDBApp.Services
                 typeof(Position),
                 typeof(Relationship)
             };
-            
+
             return types.FirstOrDefault(t => t.Name.Equals(typeName, StringComparison.OrdinalIgnoreCase));
         }
     }

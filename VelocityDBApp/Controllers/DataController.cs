@@ -3,8 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using VelocityDb.Session;
 using VelocityDb;
+using VelocityDb.Session;
 using VelocityDBApp.Models;
 using VelocityDBApp.Services;
 
@@ -15,13 +15,13 @@ namespace VelocityDBApp.Controllers
     public class DataController : ControllerBase
     {
         private readonly DatabaseInitializer _dbInitializer;
-        private readonly string _databaseName = "MyAppDB";
-        
+        private readonly string _databaseName = "MyAppDatabase";
+
         public DataController(DatabaseInitializer dbInitializer)
         {
             _dbInitializer = dbInitializer;
         }
-        
+
         [HttpPost("initialize")]
         public IActionResult InitializeDatabase()
         {
@@ -35,7 +35,7 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Database initialization failed: {ex.Message}");
             }
         }
-        
+
         [HttpPost("reset")]
         public IActionResult ResetDatabase()
         {
@@ -49,7 +49,7 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Database reset failed: {ex.Message}");
             }
         }
-        
+
         [HttpDelete("delete")]
         public IActionResult DeleteDatabase()
         {
@@ -68,26 +68,25 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Database deletion failed: {ex.Message}");
             }
         }
-        
+
         [HttpGet("workspace")]
         public IActionResult GetWorkspaceData()
         {
             try
             {
-                var basePath = Path.GetDirectoryName(_dbInitializer.GetDatabasePath());
-                DatabaseInitializer.SetupSession(basePath);
-                
+                var basePath = _dbInitializer.GetDatabasePath();
+                SessionBase.BaseDatabasePath = basePath;
+
                 using (var session = new SessionNoServer(_databaseName))
                 {
                     session.BeginRead();
-                    
                     var workspaceData = session.AllObjects<WorkspaceData>().FirstOrDefault();
-                    
+
                     if (workspaceData == null)
                     {
                         return Ok(new { message = "No workspace data found" });
                     }
-                    
+
                     return Ok(workspaceData);
                 }
             }
@@ -96,19 +95,18 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Error retrieving workspace data: {ex.Message}");
             }
         }
-        
+
         [HttpGet("users")]
         public IActionResult GetUsers()
         {
             try
             {
-                var basePath = Path.GetDirectoryName(_dbInitializer.GetDatabasePath());
-                DatabaseInitializer.SetupSession(basePath);
-                
+                var basePath = _dbInitializer.GetDatabasePath();
+                SessionBase.BaseDatabasePath = basePath;
+
                 using (var session = new SessionNoServer(_databaseName))
                 {
                     session.BeginRead();
-                    
                     var users = session.AllObjects<User>().ToList();
                     return Ok(users);
                 }
@@ -118,48 +116,50 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Error retrieving users: {ex.Message}");
             }
         }
-        
+
         [HttpGet("status")]
         public IActionResult GetDatabaseStatus()
         {
             try
             {
                 var dbPath = _dbInitializer.GetDatabasePath();
-                
+
                 if (!Directory.Exists(dbPath))
                 {
-                    return Ok(new { 
-                        initialized = false, 
+                    return Ok(new
+                    {
+                        initialized = false,
                         message = "Database directory does not exist",
-                        path = dbPath 
+                        path = dbPath
                     });
                 }
-                
-                var files = Directory.GetFiles(dbPath);
-                
+
+                var myAppDbDir = Path.Combine(dbPath, _databaseName);
+                var files = Directory.Exists(myAppDbDir) ? Directory.GetFiles(myAppDbDir) : Array.Empty<string>();
+
+
                 if (files.Length == 0)
                 {
-                    return Ok(new { 
-                        initialized = false, 
+                    return Ok(new
+                    {
+                        initialized = false,
                         message = "Database directory is empty",
-                        path = dbPath 
+                        path = dbPath
                     });
                 }
-                
+
                 try
                 {
-                    var basePath = Path.GetDirectoryName(dbPath);
-                    DatabaseInitializer.SetupSession(basePath);
-                    
+                    SessionBase.BaseDatabasePath = dbPath;
+
                     using (var session = new SessionNoServer(_databaseName))
                     {
                         session.BeginRead();
-                        
                         var userCount = session.AllObjects<User>().Count();
-                        
-                        return Ok(new 
-                        { 
-                            initialized = true, 
+
+                        return Ok(new
+                        {
+                            initialized = true,
                             userCount = userCount,
                             path = dbPath,
                             fileCount = files.Length,
@@ -169,9 +169,9 @@ namespace VelocityDBApp.Controllers
                 }
                 catch (Exception ex)
                 {
-                    return Ok(new 
-                    { 
-                        initialized = false, 
+                    return Ok(new
+                    {
+                        initialized = false,
                         message = $"Database exists but cannot read: {ex.Message}",
                         path = dbPath,
                         fileCount = files.Length
@@ -183,21 +183,21 @@ namespace VelocityDBApp.Controllers
                 return BadRequest($"Error checking status: {ex.Message}");
             }
         }
-        
+
         [HttpGet("debug")]
         public IActionResult GetDebugInfo()
         {
             try
             {
                 var dbPath = _dbInitializer.GetDatabasePath();
-                
+
                 return Ok(new
                 {
-                    DatabasePath = dbPath,
-                    DatabasePathExists = Directory.Exists(dbPath),
-                    CurrentBasePath = SessionBase.BaseDatabasePath,
-                    DatabaseName = _databaseName,
-                    CurrentDirectory = Directory.GetCurrentDirectory()
+                    databasePath = dbPath,
+                    databasePathExists = Directory.Exists(dbPath),
+                    currentBasePath = SessionBase.BaseDatabasePath,
+                    databaseName = _databaseName,
+                    currentDirectory = Directory.GetCurrentDirectory()
                 });
             }
             catch (Exception ex)
