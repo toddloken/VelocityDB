@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using VelocityDb.Session;
 using VelocityDBApp.Models;
 
@@ -16,21 +17,36 @@ namespace VelocityDBApp.Services
         
         public void InitializeDatabase()
         {
+            // Ensure database directory exists
+            var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
+            if (!Directory.Exists(dbDirectory))
+            {
+                Directory.CreateDirectory(dbDirectory);
+            }
+            
             using (var session = new SessionNoServer(_databasePath))
             {
                 session.BeginUpdate();
                 
-                // Register classes
-                session.RegisterClass(typeof(User));
-                session.RegisterClass(typeof(WorkspaceData));
-                session.RegisterClass(typeof(WorkspaceObject));
-                session.RegisterClass(typeof(Position));
-                session.RegisterClass(typeof(Relationship));
-                
-                // Create initial data
-                SeedInitialData(session);
-                
-                session.Commit();
+                try
+                {
+                    // Register classes
+                    session.RegisterClass(typeof(User));
+                    session.RegisterClass(typeof(WorkspaceData));
+                    session.RegisterClass(typeof(WorkspaceObject));
+                    session.RegisterClass(typeof(Position));
+                    session.RegisterClass(typeof(Relationship));
+                    
+                    // Create initial data
+                    SeedInitialData(session);
+                    
+                    session.Commit();
+                }
+                catch (Exception)
+                {
+                    session.Abort();
+                    throw;
+                }
             }
         }
         

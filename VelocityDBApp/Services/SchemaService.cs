@@ -20,6 +20,8 @@ namespace VelocityDBApp.Services
         {
             using (var session = new SessionNoServer(_databasePath))
             {
+                session.BeginRead(); // Start read transaction
+                
                 var schema = new
                 {
                     DatabasePath = _databasePath,
@@ -52,6 +54,8 @@ namespace VelocityDBApp.Services
         {
             using (var session = new SessionNoServer(_databasePath))
             {
+                session.BeginRead(); // Start read transaction
+                
                 var structure = new
                 {
                     Users = GetObjectStructure<User>(session),
@@ -108,14 +112,29 @@ namespace VelocityDBApp.Services
         
         private object GetDatabaseStatistics(SessionNoServer session)
         {
-            return new
+            try
             {
-                UserCount = session.AllObjects<User>().Count(),
-                WorkspaceDataCount = session.AllObjects<WorkspaceData>().Count(),
-                WorkspaceObjectCount = session.AllObjects<WorkspaceObject>().Count(),
-                RelationshipCount = session.AllObjects<Relationship>().Count(),
-                PositionCount = session.AllObjects<Position>().Count()
-            };
+                return new
+                {
+                    UserCount = session.AllObjects<User>().Count(),
+                    WorkspaceDataCount = session.AllObjects<WorkspaceData>().Count(),
+                    WorkspaceObjectCount = session.AllObjects<WorkspaceObject>().Count(),
+                    RelationshipCount = session.AllObjects<Relationship>().Count(),
+                    PositionCount = session.AllObjects<Position>().Count()
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    Error = $"Could not retrieve statistics: {ex.Message}",
+                    UserCount = 0,
+                    WorkspaceDataCount = 0,
+                    WorkspaceObjectCount = 0,
+                    RelationshipCount = 0,
+                    PositionCount = 0
+                };
+            }
         }
         
         private object GetIndexInformation(SessionNoServer session)
@@ -130,15 +149,29 @@ namespace VelocityDBApp.Services
         
         private object GetObjectStructure<T>(SessionNoServer session) where T : class
         {
-            var objects = session.AllObjects<T>().Take(5).ToList(); // Get first 5 for structure
-            
-            return new
+            try
             {
-                TypeName = typeof(T).Name,
-                Count = session.AllObjects<T>().Count(),
-                SampleData = objects,
-                Properties = GetTypeProperties(typeof(T))
-            };
+                var objects = session.AllObjects<T>().Take(5).ToList(); // Get first 5 for structure
+                
+                return new
+                {
+                    TypeName = typeof(T).Name,
+                    Count = session.AllObjects<T>().Count(),
+                    SampleData = objects,
+                    Properties = GetTypeProperties(typeof(T))
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    TypeName = typeof(T).Name,
+                    Count = 0,
+                    SampleData = new List<T>(),
+                    Properties = GetTypeProperties(typeof(T)),
+                    Error = ex.Message
+                };
+            }
         }
         
         private Type GetTypeByName(string typeName)
