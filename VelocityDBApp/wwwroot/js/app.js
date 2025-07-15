@@ -1,4 +1,5 @@
-﻿async function initializeDatabase() {
+﻿//
+async function initializeDatabase() {
     try {
         const response = await fetch('/api/data/initialize', {
             method: 'POST',
