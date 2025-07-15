@@ -151,3 +151,62 @@ async function checkDatabaseStatus() {
         document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
     }
 }
+
+async function getDebugInfo() {
+    try {
+        const response = await fetch('/api/data/debug');
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            document.getElementById('output').innerHTML = `<p>Error: ${errorText}</p>`;
+            return;
+        }
+
+        const data = await response.json();
+        document.getElementById('output').innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+    } catch (error) {
+        console.error('Error getting debug info:', error);
+        document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
+    }
+}
+
+async function resetDatabase() {
+    try {
+        const response = await fetch('/api/data/reset', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const result = await response.text();
+        document.getElementById('output').innerHTML = `<p>Reset DB: ${result}</p>`;
+
+        if (!response.ok) {
+            console.error('Database reset failed:', result);
+        }
+    } catch (error) {
+        console.error('Error resetting database:', error);
+        document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
+    }
+}
+
+async function deleteDatabase() {
+    if (confirm('Are you sure you want to delete the entire database?')) {
+        try {
+            const response = await fetch('/api/data/delete', {
+                method: 'DELETE'
+            });
+
+            const result = await response.text();
+            document.getElementById('output').innerHTML = `<p>Delete DB: ${result}</p>`;
+
+            if (!response.ok) {
+                console.error('Database deletion failed:', result);
+            }
+        } catch (error) {
+            console.error('Error deleting database:', error);
+            document.getElementById('output').innerHTML = `<p>Error: ${error.message}</p>`;
+        }
+    }
+}

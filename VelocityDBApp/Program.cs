@@ -7,9 +7,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Register services
-builder.Services.AddSingleton(provider => new DatabaseInitializer("MyAppDatabase"));
-builder.Services.AddSingleton(provider => new SchemaService("MyAppDatabase"));
+// Register services - using a simple database name
+builder.Services.AddSingleton(provider => new DatabaseInitializer("MyAppDB"));
 
 var app = builder.Build();
 

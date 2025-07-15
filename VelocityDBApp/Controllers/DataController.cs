@@ -1,8 +1,10 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using VelocityDb.Session;
+using VelocityDb;
 using VelocityDBApp.Models;
 using VelocityDBApp.Services;
 
@@ -13,7 +15,7 @@ namespace VelocityDBApp.Controllers
     public class DataController : ControllerBase
     {
         private readonly DatabaseInitializer _dbInitializer;
-        private readonly string _databasePath = "MyAppDatabase";
+        private readonly string _databaseName = "MyAppDB";
         
         public DataController(DatabaseInitializer dbInitializer)
         {
@@ -25,14 +27,7 @@ namespace VelocityDBApp.Controllers
         {
             try
             {
-                // Create database directory if it doesn't exist
-                var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
-                if (!Directory.Exists(dbDirectory))
-                {
-                    Directory.CreateDirectory(dbDirectory);
-                }
-                
-                _dbInitializer.InitializeDatabase();
+                _dbInitializer.InitializeDatabase(recreate: false);
                 return Ok("Database initialized successfully");
             }
             catch (Exception ex)
@@ -41,27 +36,56 @@ namespace VelocityDBApp.Controllers
             }
         }
         
+        [HttpPost("reset")]
+        public IActionResult ResetDatabase()
+        {
+            try
+            {
+                _dbInitializer.RecreateDatabase();
+                return Ok("Database reset and recreated successfully");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Database reset failed: {ex.Message}");
+            }
+        }
+        
+        [HttpDelete("delete")]
+        public IActionResult DeleteDatabase()
+        {
+            try
+            {
+                var dbPath = _dbInitializer.GetDatabasePath();
+                if (Directory.Exists(dbPath))
+                {
+                    Directory.Delete(dbPath, true);
+                    return Ok("Database deleted successfully");
+                }
+                return Ok("Database directory does not exist");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Database deletion failed: {ex.Message}");
+            }
+        }
+        
         [HttpGet("workspace")]
         public IActionResult GetWorkspaceData()
         {
             try
             {
-                // Check if database exists
-                var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
-                if (!Directory.Exists(dbDirectory))
-                {
-                    return BadRequest("Database not initialized. Please initialize the database first.");
-                }
+                var basePath = Path.GetDirectoryName(_dbInitializer.GetDatabasePath());
+                DatabaseInitializer.SetupSession(basePath);
                 
-                using (var session = new SessionNoServer(_databasePath))
+                using (var session = new SessionNoServer(_databaseName))
                 {
-                    session.BeginRead(); // Start read transaction
+                    session.BeginRead();
                     
                     var workspaceData = session.AllObjects<WorkspaceData>().FirstOrDefault();
                     
                     if (workspaceData == null)
                     {
-                        return Ok(new { message = "No workspace data found. Database may not be properly seeded." });
+                        return Ok(new { message = "No workspace data found" });
                     }
                     
                     return Ok(workspaceData);
@@ -78,16 +102,12 @@ namespace VelocityDBApp.Controllers
         {
             try
             {
-                // Check if database exists
-                var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
-                if (!Directory.Exists(dbDirectory))
-                {
-                    return BadRequest("Database not initialized. Please initialize the database first.");
-                }
+                var basePath = Path.GetDirectoryName(_dbInitializer.GetDatabasePath());
+                DatabaseInitializer.SetupSession(basePath);
                 
-                using (var session = new SessionNoServer(_databasePath))
+                using (var session = new SessionNoServer(_databaseName))
                 {
-                    session.BeginRead(); // Start read transaction
+                    session.BeginRead();
                     
                     var users = session.AllObjects<User>().ToList();
                     return Ok(users);
@@ -99,72 +119,90 @@ namespace VelocityDBApp.Controllers
             }
         }
         
-        [HttpPost("workspace")]
-        public IActionResult SaveWorkspaceData([FromBody] WorkspaceData workspaceData)
-        {
-            try
-            {
-                // Check if database exists
-                var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
-                if (!Directory.Exists(dbDirectory))
-                {
-                    return BadRequest("Database not initialized. Please initialize the database first.");
-                }
-                
-                using (var session = new SessionNoServer(_databasePath))
-                {
-                    session.BeginUpdate();
-                    session.Persist(workspaceData);
-                    session.Commit();
-                    return Ok("Workspace data saved successfully");
-                }
-            }
-            catch (Exception ex)
-            {
-                return BadRequest($"Error saving workspace data: {ex.Message}");
-            }
-        }
-        
         [HttpGet("status")]
         public IActionResult GetDatabaseStatus()
         {
             try
             {
-                var dbDirectory = Path.Combine(Directory.GetCurrentDirectory(), _databasePath);
-                var exists = Directory.Exists(dbDirectory);
+                var dbPath = _dbInitializer.GetDatabasePath();
                 
-                if (!exists)
+                if (!Directory.Exists(dbPath))
                 {
-                    return Ok(new { initialized = false, message = "Database not initialized" });
+                    return Ok(new { 
+                        initialized = false, 
+                        message = "Database directory does not exist",
+                        path = dbPath 
+                    });
                 }
                 
-                // Check if database files exist
-                var dbFiles = Directory.GetFiles(dbDirectory, "*.odb");
-                if (dbFiles.Length == 0)
+                var files = Directory.GetFiles(dbPath);
+                
+                if (files.Length == 0)
                 {
-                    return Ok(new { initialized = false, message = "Database directory exists but no database files found" });
+                    return Ok(new { 
+                        initialized = false, 
+                        message = "Database directory is empty",
+                        path = dbPath 
+                    });
                 }
                 
-                using (var session = new SessionNoServer(_databasePath))
+                try
                 {
-                    session.BeginRead(); // Start read transaction
+                    var basePath = Path.GetDirectoryName(dbPath);
+                    DatabaseInitializer.SetupSession(basePath);
                     
-                    var userCount = session.AllObjects<User>().Count();
-                    var workspaceCount = session.AllObjects<WorkspaceData>().Count();
-                    
+                    using (var session = new SessionNoServer(_databaseName))
+                    {
+                        session.BeginRead();
+                        
+                        var userCount = session.AllObjects<User>().Count();
+                        
+                        return Ok(new 
+                        { 
+                            initialized = true, 
+                            userCount = userCount,
+                            path = dbPath,
+                            fileCount = files.Length,
+                            files = files.Select(Path.GetFileName).ToArray()
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
                     return Ok(new 
                     { 
-                        initialized = true, 
-                        userCount = userCount,
-                        workspaceCount = workspaceCount,
-                        databasePath = dbDirectory,
-                        databaseFiles = dbFiles.Length
+                        initialized = false, 
+                        message = $"Database exists but cannot read: {ex.Message}",
+                        path = dbPath,
+                        fileCount = files.Length
                     });
                 }
             }
             catch (Exception ex)
             {
-                return BadRequest($"Error checking database status: {ex.Message}");
+                return BadRequest($"Error checking status: {ex.Message}");
+            }
+        }
+        
+        [HttpGet("debug")]
+        public IActionResult GetDebugInfo()
+        {
+            try
+            {
+                var dbPath = _dbInitializer.GetDatabasePath();
+                
+                return Ok(new
+                {
+                    DatabasePath = dbPath,
+                    DatabasePathExists = Directory.Exists(dbPath),
+                    CurrentBasePath = SessionBase.BaseDatabasePath,
+                    DatabaseName = _databaseName,
+                    CurrentDirectory = Directory.GetCurrentDirectory()
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest($"Debug error: {ex.Message}");
             }
         }
     }
